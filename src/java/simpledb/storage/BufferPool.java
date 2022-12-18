@@ -38,13 +38,18 @@ public class BufferPool {
      */
     public static final int DEFAULT_PAGES = 50;
 
+    private final int numPages;
+    private ConcurrentHashMap<PageId, Page> bufferPool;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
      * @param numPages maximum number of pages in this buffer pool.
      */
     public BufferPool(int numPages) {
-        // TODO: some code goes here
+        // some code goes here
+        this.numPages = numPages;
+        this.bufferPool = new ConcurrentHashMap<>(numPages);
     }
 
     public static int getPageSize() {
@@ -76,10 +81,23 @@ public class BufferPool {
      * @param pid  the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        if (bufferPool.containsKey(pid)) {
+            return bufferPool.get(pid);
+        } else {
+            if (bufferPool.size() < numPages) {
+                Page page =
+                        Database.getCatalog()
+                                .getDatabaseFile(pid.getTableId())
+                                .readPage(pid);
+                bufferPool.put(pid, page);
+                return page;
+            } else {
+                throw new DbException("BufferPool: BufferPool is full");
+            }
+        }
     }
 
     /**
