@@ -19,6 +19,9 @@ import java.io.IOException;
 public class Delete extends Operator {
 
     private static final long serialVersionUID = 1L;
+    private TransactionId tid;
+    private OpIterator child;
+    private boolean deleted;
 
     /**
      * Constructor specifying the transaction that this delete belongs to as
@@ -28,24 +31,33 @@ public class Delete extends Operator {
      * @param child The child operator from which to read tuples for deletion
      */
     public Delete(TransactionId t, OpIterator child) {
-        // TODO: some code goes here
+        // some code goes here
+        this.tid = t;
+        this.child = child;
     }
 
     public TupleDesc getTupleDesc() {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        return new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{"num of deletes"});
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        // TODO: some code goes here
+        // some code goes here
+        super.open();
+        child.open();
+        deleted=false;
     }
 
     public void close() {
-        // TODO: some code goes here
+        // some code goes here
+        child.close();
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
-        // TODO: some code goes here
+        // some code goes here
+        close();
+        open();
     }
 
     /**
@@ -58,19 +70,37 @@ public class Delete extends Operator {
      * @see BufferPool#deleteTuple
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        if (!deleted) {
+            BufferPool bufferPool = Database.getBufferPool();
+            int count = 0;
+            while (child.hasNext()) {
+                try {
+                    bufferPool.deleteTuple(tid, child.next());
+                    count++;
+                } catch (IOException e) {
+                    throw new DbException("Insert: bufferPool.deleteTuple fail");
+                }
+            }
+            deleted=true;
+            Tuple td = new Tuple(getTupleDesc());
+            td.setField(0, new IntField(count));
+            return td;
+        }else{
+            return null;
+        }
     }
 
     @Override
     public OpIterator[] getChildren() {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        return new OpIterator[]{child};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
-        // TODO: some code goes here
+        // some code goes here
+        child = children[0];
     }
 
 }

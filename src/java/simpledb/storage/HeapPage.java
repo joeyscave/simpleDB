@@ -20,11 +20,13 @@ import java.util.NoSuchElementException;
  */
 public class HeapPage implements Page {
 
-    final HeapPageId pid;
-    final TupleDesc td;
-    final byte[] header;
-    final Tuple[] tuples;
-    final int numSlots;
+    private final HeapPageId pid;
+    private final TupleDesc td;
+    private final byte[] header;
+    private final Tuple[] tuples;
+    private final int numSlots;
+    private boolean dirty;
+    private TransactionId lastTid;
 
     byte[] oldData;
     private final Byte oldDataLock = (byte) 0;
@@ -253,8 +255,13 @@ public class HeapPage implements Page {
      *                     already empty.
      */
     public void deleteTuple(Tuple t) throws DbException {
-        // TODO: some code goes here
-        // not necessary for lab1
+        // some code goes here
+        RecordId rid = t.getRecordId();
+        if (rid.getPageId().equals(pid) && isSlotUsed(rid.getTupleNumber())) {
+            markSlotUsed(rid.getTupleNumber(), false);
+        } else {
+            throw new DbException("HeapPage: deleteTuple fail");
+        }
     }
 
     /**
@@ -266,8 +273,19 @@ public class HeapPage implements Page {
      *                     is mismatch.
      */
     public void insertTuple(Tuple t) throws DbException {
-        // TODO: some code goes here
-        // not necessary for lab1
+        // some code goes here
+        if ((getNumUnusedSlots() > 0) && t.getTupleDesc().equals(td)) {
+            for (int i = 0; i < numSlots; i++) {
+                if (!isSlotUsed(i)){
+                    tuples[i]=t;
+                    markSlotUsed(i,true);
+                    t.setRecordId(new RecordId(pid,i));
+                    break;
+                }
+            }
+        } else {
+            throw new DbException("HeapPage: insertTuple fail");
+        }
     }
 
     /**
@@ -275,17 +293,31 @@ public class HeapPage implements Page {
      * that did the dirtying
      */
     public void markDirty(boolean dirty, TransactionId tid) {
-        // TODO: some code goes here
-        // not necessary for lab1
+        // some code goes here
+        this.dirty = dirty;
+        lastTid = dirty ? tid : null;
     }
 
     /**
      * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
      */
     public TransactionId isDirty() {
-        // TODO: some code goes here
-        // Not necessary for lab1
-        return null;      
+        // some code goes here
+        return dirty ? lastTid : null;
+    }
+
+    private void markSlotUsed(int i, boolean used) {
+        if (i < numSlots) {
+            int hdNo = i / 8;
+            int offset = i % 8;
+
+            byte mask = (byte) (0x1 << offset);
+            if (used) {
+                header[hdNo] |= mask;
+            } else {
+                header[hdNo] &= ~mask;
+            }
+        }
     }
 
     /**
@@ -318,6 +350,7 @@ public class HeapPage implements Page {
 
     protected class HeapPageTupleIterator implements Iterator {
         private final Iterator<Tuple> iter;
+
         public HeapPageTupleIterator() {
             ArrayList<Tuple> tupleArrayList = new ArrayList<Tuple>(tuples.length);
             for (int i = 0; i < tuples.length; i++) {
@@ -343,6 +376,7 @@ public class HeapPage implements Page {
             return iter.next();
         }
     }
+
     /**
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)
      * (note that this iterator shouldn't return tuples in empty slots!)

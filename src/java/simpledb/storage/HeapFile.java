@@ -98,8 +98,15 @@ public class HeapFile implements DbFile {
 
     // see DbFile.java for javadocs
     public void writePage(Page page) throws IOException {
-        // TODO: some code goes here
-        // not necessary for lab1
+        // some code goes here
+        PageId pid = page.getId();
+        int pgNo = pid.getPageNumber();
+        final int pageSize = Database.getBufferPool().getPageSize();
+        byte[] pgData = page.getPageData();
+
+        RandomAccessFile dbfile = new RandomAccessFile(dbFile, "rws");
+        dbfile.skipBytes(pgNo * pageSize);
+        dbfile.write(pgData);
     }
 
     /**
@@ -113,18 +120,47 @@ public class HeapFile implements DbFile {
 
     // see DbFile.java for javadocs
     public List<Page> insertTuple(TransactionId tid, Tuple t)
-            throws DbException, IOException, TransactionAbortedException {
-        // TODO: some code goes here
-        return null;
-        // not necessary for lab1
+            throws DbException, TransactionAbortedException, IOException {
+        // some code goes here
+        BufferPool bufferPool = Database.getBufferPool();
+        List<Page> pages = new ArrayList<>();
+        int i = 0;
+        for (; i < numPages(); i++) {
+            HeapPage p = (HeapPage) bufferPool.getPage(tid, new HeapPageId(getId(), i), Permissions.READ_WRITE);
+            if (p.getNumUnusedSlots() > 0) {
+                p.insertTuple(t);
+                pages.add(p);
+                break;
+            }
+        }
+        if (i == numPages()) {
+            HeapPage p=new HeapPage(new HeapPageId(getId(),numPages()),HeapPage.createEmptyPageData());
+            p.insertTuple(t);
+            writePage(p);
+            pages.add(p);
+        }
+        return pages;
     }
 
     // see DbFile.java for javadocs
     public List<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
-        // TODO: some code goes here
-        return null;
-        // not necessary for lab1
+        // some code goes here
+        BufferPool bufferPool = Database.getBufferPool();
+        List<Page> pages = new ArrayList<>();
+        int i = 0;
+        for (; i < numPages(); i++) {
+            HeapPage p = (HeapPage) bufferPool.getPage(tid, new HeapPageId(getId(), i), Permissions.READ_WRITE);
+            if (p.getId().equals(t.getRecordId().getPageId())){
+                p.deleteTuple(t);
+                pages.add(p);
+                break;
+            }
+        }
+        if (i==numPages()){
+            throw new DbException("HeapFile: deleteTuple() can't find tuple");
+        }
+        return pages;
     }
 
     private class HeapFileIterator implements DbFileIterator {
@@ -169,7 +205,7 @@ public class HeapFile implements DbFile {
 
         @Override
         public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
-            if (hasNext())  {
+            if (hasNext()) {
                 return tupleIter.next();
             }
             throw new NoSuchElementException("HeapFileIterator: error: next: no more elemens");

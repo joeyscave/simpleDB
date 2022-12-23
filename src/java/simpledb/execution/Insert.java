@@ -2,11 +2,13 @@ package simpledb.execution;
 
 import simpledb.common.Database;
 import simpledb.common.DbException;
-import simpledb.storage.BufferPool;
-import simpledb.storage.Tuple;
-import simpledb.storage.TupleDesc;
+import simpledb.common.Permissions;
+import simpledb.common.Type;
+import simpledb.storage.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
+
+import java.io.IOException;
 
 /**
  * Inserts tuples read from the child operator into the tableId specified in the
@@ -15,6 +17,10 @@ import simpledb.transaction.TransactionId;
 public class Insert extends Operator {
 
     private static final long serialVersionUID = 1L;
+    private TransactionId tid;
+    private OpIterator child;
+    private int tableId;
+    private boolean inserted;
 
     /**
      * Constructor.
@@ -27,24 +33,32 @@ public class Insert extends Operator {
      */
     public Insert(TransactionId t, OpIterator child, int tableId)
             throws DbException {
-        // TODO: some code goes here
+        // some code goes here
+        this.tid = t;
+        this.child = child;
+        this.tableId = tableId;
     }
 
     public TupleDesc getTupleDesc() {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        return new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{"num of inserts"});
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        // TODO: some code goes here
+        // some code goes here
+        super.open();
+        child.open();
+        inserted=false;
     }
 
     public void close() {
-        // TODO: some code goes here
+        child.close();
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
-        // TODO: some code goes here
+        close();
+        open();
     }
 
     /**
@@ -56,23 +70,41 @@ public class Insert extends Operator {
      * duplicate before inserting it.
      *
      * @return A 1-field tuple containing the number of inserted records, or
-     *         null if called more than once.
+     * null if called more than once.
      * @see Database#getBufferPool
      * @see BufferPool#insertTuple
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        if (!inserted) {
+            BufferPool bufferPool = Database.getBufferPool();
+            int count = 0;
+            while (child.hasNext()) {
+                try {
+                    bufferPool.insertTuple(tid, tableId, child.next());
+                    count++;
+                } catch (IOException e) {
+                    throw new DbException("Insert: bufferPool.insertTuple fail");
+                }
+            }
+            inserted=true;
+            Tuple td = new Tuple(getTupleDesc());
+            td.setField(0, new IntField(count));
+            return td;
+        }else{
+            return null;
+        }
     }
 
     @Override
     public OpIterator[] getChildren() {
-        // TODO: some code goes here
-        return null;
+        // some code goes here
+        return new OpIterator[]{child};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
-        // TODO: some code goes here
+        // some code goes here
+        child = children[0];
     }
 }
